@@ -1,0 +1,25 @@
+{
+  "name": "com.control-tools.post-processing-dithering",
+  "version": "0.1.0",
+  "displayName": "Control Tools - Post Processing Dithering",
+  "description": "A URP fullscreen Volume effect for texture-driven blue-noise color dithering.",
+  "unity": "6000.3",
+  "license": "MIT",
+  "author": {
+    "name": "Control Tools"
+  },
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.3.0"
+  },
+  "keywords": [
+    "urp",
+    "unity",
+    "tools",
+    "post-processing",
+    "volume",
+    "dithering",
+    "blue-noise",
+    "control-tools"
+  ],
+  "type": "library"
+}
