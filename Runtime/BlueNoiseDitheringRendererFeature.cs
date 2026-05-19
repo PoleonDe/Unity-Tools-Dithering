@@ -16,6 +16,9 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
         [SerializeField, HideInInspector]
         private Shader shader;
 
+        [SerializeField]
+        private RenderPassEvent renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
+
         private BlueNoiseDitheringPass pass;
         private Material material;
         private Texture2D blueNoiseTexture;
@@ -24,7 +27,7 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
         public override void Create()
         {
             pass ??= new BlueNoiseDitheringPass();
-            pass.renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
+            pass.renderPassEvent = renderPassEvent;
 
             EnsureMaterial();
             EnsureBlueNoiseTexture();
@@ -35,7 +38,7 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
             shader ??= Shader.Find(ShaderName);
 
             if (pass != null)
-                pass.renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
+                pass.renderPassEvent = renderPassEvent;
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -71,7 +74,7 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 return;
             }
 
-            pass.renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
+            pass.renderPassEvent = renderPassEvent;
             pass.Setup(material, blueNoiseTexture, settings);
             renderer.EnqueuePass(pass);
         }
