@@ -20,12 +20,13 @@ Shader "Hidden/Control/PostProcessing/BlueNoiseDithering"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
-            TEXTURE2D(_BlueNoiseTex);
-            SAMPLER(sampler_BlueNoiseTex);
+            TEXTURE2D(_BlueNoise);
 
-            float4 _BlueNoiseTex_TexelSize;
-            float _Intensity;
-            float _ColorSteps;
+            float _Strength;
+            float _BlueNoiseTime;
+            float _EnableTemporalOffset;
+
+            static const float BlueNoiseTileSize = 256.0;
 
             half4 Frag(Varyings input) : SV_Target
             {
@@ -34,13 +35,13 @@ Shader "Hidden/Control/PostProcessing/BlueNoiseDithering"
                 float2 uv = input.texcoord.xy;
                 half4 color = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
 
-                float2 noiseUV = frac(input.positionCS.xy * _BlueNoiseTex_TexelSize.xy);
-                half noise = SAMPLE_TEXTURE2D(_BlueNoiseTex, sampler_BlueNoiseTex, noiseUV).r - 0.5;
+                float2 pixel = floor(input.positionCS.xy);
+                float2 noiseUV = (pixel + 0.5) / BlueNoiseTileSize;
+                float timeOffset = _EnableTemporalOffset > 0.5 ? _BlueNoiseTime : 0.0;
+                float3 blueNoise = SAMPLE_TEXTURE2D_LOD(_BlueNoise, sampler_PointRepeat, noiseUV + timeOffset.xx, 0).rgb;
+                float3 dithered = color.rgb + blueNoise * (_Strength / 255.0);
 
-                float levels = max(_ColorSteps - 1.0, 1.0);
-                half3 dithered = floor(saturate(color.rgb) * levels + 0.5 + noise * _Intensity) / levels;
-
-                return half4(dithered, color.a);
+                return half4(saturate(dithered), color.a);
             }
             ENDHLSL
         }

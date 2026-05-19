@@ -10,21 +10,16 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
     [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public sealed class BlueNoiseDithering : VolumeComponent, IPostProcessComponent
     {
-        [Tooltip("Blue-noise threshold texture used to distribute quantization error across the screen.")]
-        public NoInterpTextureParameter blueNoiseTexture = new NoInterpTextureParameter(null);
+        [Tooltip("Multiplier for the additive blue-noise term. The sampled texture value is divided by 255 before this multiplier is applied.")]
+        public MinFloatParameter strength = new MinFloatParameter(1f, 0f);
 
-        [Tooltip("Strength of the blue-noise offset applied before color quantization.")]
-        public ClampedFloatParameter intensity = new ClampedFloatParameter(1f, 0f, 1f);
-
-        [Tooltip("Number of discrete output values per color channel.")]
-        public ClampedIntParameter colorSteps = new ClampedIntParameter(32, 2, 256);
+        [Tooltip("Offset the blue-noise lookup by Time.time for temporal decorrelation.")]
+        public BoolParameter enableTemporalOffset = new BoolParameter(true);
 
         public bool IsActive()
         {
             return active
-                && blueNoiseTexture.value != null
-                && intensity.value > 0f
-                && colorSteps.value > 1;
+                && strength.value > 0f;
         }
 
         [Obsolete("Unused. #from(2023.1)")]

@@ -2,7 +2,7 @@
   "name": "com.control-tools.post-processing-dithering",
   "version": "0.1.0",
   "displayName": "Control Tools - Post Processing Dithering",
-  "description": "A URP fullscreen Volume effect for texture-driven blue-noise color dithering.",
+  "description": "A URP fullscreen Volume effect for subtle temporal blue-noise dithering before TAA.",
   "unity": "6000.3",
   "license": "MIT",
   "author": {

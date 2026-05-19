@@ -10,22 +10,24 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
     public sealed class BlueNoiseDitheringRendererFeature : ScriptableRendererFeature
     {
         private const string ShaderName = "Hidden/Control/PostProcessing/BlueNoiseDithering";
+        private const RenderPassEvent BeforeTemporalAccumulationRenderPassEvent = (RenderPassEvent)((int)RenderPassEvent.BeforeRenderingPostProcessing - 1);
+        private const string BlueNoiseResourcePath = "ControlTools/PostProcessing/BlueNoiseDithering/256_256_HDR_RGBA_0";
 
-        [SerializeField]
-        private RenderPassEvent renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing;
-
-        [SerializeField]
+        [SerializeField, HideInInspector]
         private Shader shader;
 
         private BlueNoiseDitheringPass pass;
         private Material material;
+        private Texture2D blueNoiseTexture;
+        private bool loggedBlueNoiseLoadFailure;
 
         public override void Create()
         {
             pass ??= new BlueNoiseDitheringPass();
-            pass.renderPassEvent = renderPassEvent;
+            pass.renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
 
             EnsureMaterial();
+            EnsureBlueNoiseTexture();
         }
 
         private void OnValidate()
@@ -33,7 +35,7 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
             shader ??= Shader.Find(ShaderName);
 
             if (pass != null)
-                pass.renderPassEvent = renderPassEvent;
+                pass.renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -57,8 +59,20 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 return;
             }
 
-            pass.renderPassEvent = renderPassEvent;
-            pass.Setup(material, settings);
+            EnsureBlueNoiseTexture();
+            if (blueNoiseTexture == null)
+            {
+                if (!loggedBlueNoiseLoadFailure)
+                {
+                    Debug.LogWarning($"{nameof(BlueNoiseDitheringRendererFeature)} could not load blue-noise texture from Resources/{BlueNoiseResourcePath}.");
+                    loggedBlueNoiseLoadFailure = true;
+                }
+
+                return;
+            }
+
+            pass.renderPassEvent = BeforeTemporalAccumulationRenderPassEvent;
+            pass.Setup(material, blueNoiseTexture, settings);
             renderer.EnqueuePass(pass);
         }
 
@@ -66,6 +80,7 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
         {
             pass?.Dispose();
             CoreUtils.Destroy(material);
+            blueNoiseTexture = null;
         }
 
         private void EnsureMaterial()
@@ -81,21 +96,32 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
             material = CoreUtils.CreateEngineMaterial(activeShader);
         }
 
+        private void EnsureBlueNoiseTexture()
+        {
+            if (blueNoiseTexture != null)
+                return;
+
+            blueNoiseTexture = Resources.Load<Texture2D>(BlueNoiseResourcePath);
+            loggedBlueNoiseLoadFailure = blueNoiseTexture != null ? false : loggedBlueNoiseLoadFailure;
+        }
+
         private sealed class BlueNoiseDitheringPass : ScriptableRenderPass
         {
             private static readonly int BlitTextureId = Shader.PropertyToID("_BlitTexture");
             private static readonly int BlitScaleBiasId = Shader.PropertyToID("_BlitScaleBias");
-            private static readonly int BlueNoiseTexId = Shader.PropertyToID("_BlueNoiseTex");
-            private static readonly int IntensityId = Shader.PropertyToID("_Intensity");
-            private static readonly int ColorStepsId = Shader.PropertyToID("_ColorSteps");
+            private static readonly int BlueNoiseId = Shader.PropertyToID("_BlueNoise");
+            private static readonly int StrengthId = Shader.PropertyToID("_Strength");
+            private static readonly int BlueNoiseTimeId = Shader.PropertyToID("_BlueNoiseTime");
+            private static readonly int EnableTemporalOffsetId = Shader.PropertyToID("_EnableTemporalOffset");
 
             private readonly ProfilingSampler profiling = new ProfilingSampler("Blue Noise Dithering");
             private readonly MaterialPropertyBlock propertyBlock = new MaterialPropertyBlock();
 
             private Material material;
-            private Texture blueNoiseTexture;
-            private float intensity;
-            private int colorSteps;
+            private Texture2D blueNoiseTexture;
+            private float strength;
+            private float blueNoiseTime;
+            private float enableTemporalOffset;
 
 #if URP_COMPATIBILITY_MODE
             private RTHandle copiedColor;
@@ -106,12 +132,13 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 requiresIntermediateTexture = true;
             }
 
-            public void Setup(Material material, BlueNoiseDithering settings)
+            public void Setup(Material material, Texture2D blueNoiseTexture, BlueNoiseDithering settings)
             {
                 this.material = material;
-                blueNoiseTexture = settings.blueNoiseTexture.value;
-                intensity = settings.intensity.value;
-                colorSteps = settings.colorSteps.value;
+                this.blueNoiseTexture = blueNoiseTexture;
+                strength = settings.strength.value;
+                enableTemporalOffset = settings.enableTemporalOffset.value ? 1f : 0f;
+                blueNoiseTime = settings.enableTemporalOffset.value ? Time.time : 0f;
                 requiresIntermediateTexture = true;
             }
 
@@ -189,8 +216,9 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                     passData.propertyBlock = propertyBlock;
                     passData.source = copiedColor;
                     passData.blueNoiseTexture = blueNoiseTexture;
-                    passData.intensity = intensity;
-                    passData.colorSteps = colorSteps;
+                    passData.strength = strength;
+                    passData.blueNoiseTime = blueNoiseTime;
+                    passData.enableTemporalOffset = enableTemporalOffset;
 
                     builder.UseTexture(copiedColor, AccessFlags.Read);
                     builder.SetRenderAttachment(destination, 0, AccessFlags.Write);
@@ -216,9 +244,10 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 propertyBlock.Clear();
                 propertyBlock.SetTexture(BlitTextureId, source);
                 propertyBlock.SetVector(BlitScaleBiasId, new Vector4(1f, 1f, 0f, 0f));
-                propertyBlock.SetTexture(BlueNoiseTexId, blueNoiseTexture);
-                propertyBlock.SetFloat(IntensityId, intensity);
-                propertyBlock.SetFloat(ColorStepsId, colorSteps);
+                propertyBlock.SetTexture(BlueNoiseId, blueNoiseTexture);
+                propertyBlock.SetFloat(StrengthId, strength);
+                propertyBlock.SetFloat(BlueNoiseTimeId, blueNoiseTime);
+                propertyBlock.SetFloat(EnableTemporalOffsetId, enableTemporalOffset);
 
                 cmd.DrawProcedural(Matrix4x4.identity, material, 0, MeshTopology.Triangles, 3, 1, propertyBlock);
             }
@@ -229,9 +258,10 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 data.propertyBlock.Clear();
                 data.propertyBlock.SetTexture(BlitTextureId, data.source);
                 data.propertyBlock.SetVector(BlitScaleBiasId, new Vector4(1f, 1f, 0f, 0f));
-                data.propertyBlock.SetTexture(BlueNoiseTexId, data.blueNoiseTexture);
-                data.propertyBlock.SetFloat(IntensityId, data.intensity);
-                data.propertyBlock.SetFloat(ColorStepsId, data.colorSteps);
+                data.propertyBlock.SetTexture(BlueNoiseId, data.blueNoiseTexture);
+                data.propertyBlock.SetFloat(StrengthId, data.strength);
+                data.propertyBlock.SetFloat(BlueNoiseTimeId, data.blueNoiseTime);
+                data.propertyBlock.SetFloat(EnableTemporalOffsetId, data.enableTemporalOffset);
 
                 cmd.DrawProcedural(
                     Matrix4x4.identity,
@@ -248,9 +278,10 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 public Material material;
                 public MaterialPropertyBlock propertyBlock;
                 public TextureHandle source;
-                public Texture blueNoiseTexture;
-                public float intensity;
-                public int colorSteps;
+                public Texture2D blueNoiseTexture;
+                public float strength;
+                public float blueNoiseTime;
+                public float enableTemporalOffset;
             }
         }
     }
