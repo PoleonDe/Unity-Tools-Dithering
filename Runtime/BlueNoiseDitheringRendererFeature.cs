@@ -51,6 +51,9 @@ namespace Control.Tools.PostProcessing.BlueNoiseDithering
                 return;
             }
 
+            if (!VolumeManager.instance.IsComponentActiveInMask<BlueNoiseDithering>(renderingData.cameraData.volumeLayerMask))
+                return;
+
             BlueNoiseDithering settings = VolumeManager.instance.stack.GetComponent<BlueNoiseDithering>();
             if (settings == null || !settings.IsActive())
                 return;

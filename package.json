@@ -1,6 +1,6 @@
 {
   "name": "com.control-tools.post-processing-dithering",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "displayName": "Control Tools - Post Processing Dithering",
   "description": "A URP fullscreen Volume effect for subtle temporal blue-noise dithering before TAA.",
   "unity": "6000.3",
